@@ -1,3 +1,3 @@
-FROM rust:1.62.0
+FROM rust:1.92.0
 WORKDIR /app
 COPY . .

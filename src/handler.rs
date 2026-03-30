@@ -1,6 +1,5 @@
 use log::error;
 use once_cell::sync::Lazy;
-use rand::Rng;
 use regex::Regex;
 use sqlx::MySqlPool;
 use traq_ws_bot::{events::payload, utils::is_mentioned_message};
@@ -76,7 +75,7 @@ pub async fn non_mentioned_message_handler(payload: payload::MessageCreated, res
         return;
     };
 
-    if freq < rand::thread_rng().gen_range(1..=100) {
+    if freq < rand::random_range(1..=100) {
         return;
     }
 

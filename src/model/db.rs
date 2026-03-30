@@ -1,7 +1,7 @@
 use std::env;
 
 use chrono::NaiveDateTime;
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{FromRow, MySqlPool};
 

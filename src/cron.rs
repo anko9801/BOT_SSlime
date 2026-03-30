@@ -1,7 +1,6 @@
 use std::{env, sync::Arc, thread, time::Duration};
 
 use log::{debug, error};
-use rand::Rng;
 use sqlx::MySqlPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use traq_ws_bot::utils::RateLimiter;
@@ -12,10 +11,10 @@ pub async fn start_scheduling(
     pool: &'static MySqlPool,
     channel_id: &'static str,
     rate_limiter: Arc<RateLimiter>,
-) -> anyhow::Result<tokio::task::JoinHandle<()>> {
-    let main_scheduler = JobScheduler::new()?;
+) -> anyhow::Result<()> {
+    let main_scheduler: JobScheduler = JobScheduler::new().await?;
 
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let many_msg = env::var("MANY_MSG").map(|s| s == "1").unwrap_or(false);
     let cron_schedule = if many_msg {
         "1/4 * * * * *"
@@ -28,7 +27,7 @@ pub async fn start_scheduling(
     let post_job = Job::new_async(cron_schedule, move |_uuid, _lock| {
         let rate_limiter = rate_limiter.clone();
         Box::pin(async move {
-            let next_span = rand::thread_rng().gen_range(1..60);
+            let next_span = rand::random_range(1..60);
             debug!("scheduled at {} minutes later", next_span);
             if !many_msg {
                 thread::sleep(Duration::from_secs(next_span * 60));
@@ -51,8 +50,9 @@ pub async fn start_scheduling(
         })
     })?;
 
-    main_scheduler.add(post_job)?;
-    main_scheduler.add(update_markov_job)?;
+    main_scheduler.add(post_job).await?;
+    main_scheduler.add(update_markov_job).await?;
 
-    Ok(main_scheduler.start()?)
+    main_scheduler.start().await?;
+    Ok(())
 }
