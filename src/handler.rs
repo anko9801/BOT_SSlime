@@ -1,17 +1,16 @@
 use log::error;
 use once_cell::sync::Lazy;
-use rand::Rng;
+use rand::RngExt;
 use regex::Regex;
 use sqlx::MySqlPool;
 use traq_ws_bot::{events::payload, utils::is_mentioned_message};
 
 use crate::{
-    generate_message,
+    BOT_USER_ID, FREQUENCIES_CACHE, POOL, Resource, generate_message,
     model::{
         api,
         db::{get_frequency, update_frequency},
     },
-    Resource, BOT_USER_ID, FREQUENCIES_CACHE, POOL,
 };
 
 const DEFAULT_FREQ: i64 = 20;
@@ -76,7 +75,7 @@ pub async fn non_mentioned_message_handler(payload: payload::MessageCreated, res
         return;
     };
 
-    if freq < rand::thread_rng().gen_range(1..=100) {
+    if freq < rand::rng().random_range(1..=100) {
         return;
     }
 

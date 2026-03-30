@@ -2,10 +2,11 @@ use std::env;
 
 use chrono::DateTime;
 use log::debug;
+use reqwest::Url;
 use serde_json::Value;
 use traq_ws_bot::utils::RateLimiter;
 
-use crate::{model::db::MessageRecord, BOT_ACCESS_TOKEN, BOT_ID, TARGET_USER_ID};
+use crate::{BOT_ACCESS_TOKEN, BOT_ID, TARGET_USER_ID, model::db::MessageRecord};
 
 const BASE_URL: &str = "https://q.trap.jp/api/v3";
 
@@ -75,7 +76,7 @@ where
 {
     let client = create_client();
 
-    let url = format!("{}/messages", BASE_URL);
+    let mut url = Url::parse(&format!("{}/messages", BASE_URL))?;
     let query = [
         ("word", ""),
         ("from", TARGET_USER_ID),
@@ -83,15 +84,16 @@ where
         ("offset", &offset.to_string()),
         ("sort", "createdAt"),
     ];
-    let mut builder = client.get(&url).query(&query);
+    url.query_pairs_mut().extend_pairs(&query);
     if let Some(before) = before {
         let before_str = before.to_rfc3339();
-        builder = builder.query(&[("before", &before_str)]);
+        url.query_pairs_mut().append_pair("before", &before_str);
     }
     if let Some(after) = after {
         let after_str = after.to_rfc3339();
-        builder = builder.query(&[("after", &after_str)]);
+        url.query_pairs_mut().append_pair("after", &after_str);
     }
+    let builder = client.get(url);
     let res = builder.send().await?.text().await?;
 
     parse_messages_response(res)

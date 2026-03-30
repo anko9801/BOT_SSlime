@@ -1,7 +1,7 @@
 use std::{env, sync::Arc, thread, time::Duration};
 
 use log::{debug, error};
-use rand::Rng;
+use rand::RngExt;
 use sqlx::MySqlPool;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use traq_ws_bot::utils::RateLimiter;
@@ -28,7 +28,8 @@ pub async fn start_scheduling(
     let post_job = Job::new_async(cron_schedule, move |_uuid, _lock| {
         let rate_limiter = rate_limiter.clone();
         Box::pin(async move {
-            let next_span = rand::thread_rng().gen_range(1..60);
+            let _ = rand::rng().reseed();
+            let next_span = rand::rng().random_range(1..60);
             debug!("scheduled at {} minutes later", next_span);
             if !many_msg {
                 thread::sleep(Duration::from_secs(next_span * 60));

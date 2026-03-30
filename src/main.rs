@@ -11,9 +11,11 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
 use dotenv::dotenv;
-use lindera::tokenizer::Tokenizer;
+use lindera::{
+    dictionary::load_dictionary, mode::Mode, segmenter::Segmenter, tokenizer::Tokenizer,
+};
 use markov::Chain;
 use once_cell::sync::{Lazy, OnceCell};
 use regex::{Regex, RegexSet};
@@ -22,7 +24,7 @@ use sqlx::MySqlPool;
 
 use log::{debug, info};
 use traq_ws_bot::utils::RateLimiter;
-use utils::{split_all_regex, SplittedElement};
+use utils::{SplittedElement, split_all_regex};
 
 use crate::{
     cron::start_scheduling,
@@ -157,7 +159,9 @@ fn traq_message_format(messages: String) -> Vec<ContentType> {
 }
 
 fn feed_messages(messages: &[String]) {
-    let tokenizer = Tokenizer::new().unwrap();
+    let dictionary = load_dictionary("embedded://ipadic").unwrap();
+    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
+    let tokenizer = Tokenizer::new(segmenter);
     for message in messages {
         if BLOCK_MESSAGE_REGEX.is_match(message) {
             continue;
@@ -166,9 +170,14 @@ fn feed_messages(messages: &[String]) {
         let tokens = message_elements
             .iter()
             .flat_map(|e| match e {
-                ContentType::Text(text) => tokenizer.tokenize_str(text).unwrap(),
-                ContentType::Stamp(stamp) => vec![stamp.as_str()],
-                ContentType::SpecialLink(link) => vec![link.as_str()],
+                ContentType::Text(text) => tokenizer
+                    .tokenize(text)
+                    .unwrap()
+                    .iter()
+                    .map(|t| t.surface.to_string())
+                    .collect(),
+                ContentType::Stamp(stamp) => vec![stamp.to_string()],
+                ContentType::SpecialLink(link) => vec![link.to_string()],
             })
             .collect::<Vec<_>>();
 
@@ -198,5 +207,5 @@ pub async fn update_markov_chain(pool: &MySqlPool) -> anyhow::Result<()> {
 }
 
 fn naive_to_local(naive: NaiveDateTime) -> DateTime<Local> {
-    DateTime::<Local>::from_utc(naive, *Local::now().offset())
+    Local.from_utc_datetime(&naive)
 }
