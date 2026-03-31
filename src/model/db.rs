@@ -83,12 +83,11 @@ pub async fn get_messages_batched(
     offset: i64,
     limit: i64,
 ) -> anyhow::Result<Vec<MessageRecord>> {
-    let messages: Vec<MessageRecord> =
-        sqlx::query_as("SELECT * FROM messages LIMIT ? OFFSET ?")
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?;
+    let messages: Vec<MessageRecord> = sqlx::query_as("SELECT * FROM messages LIMIT ? OFFSET ?")
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
     Ok(messages)
 }
 

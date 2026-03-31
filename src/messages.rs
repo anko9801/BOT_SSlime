@@ -44,8 +44,7 @@ where
     let mut count = res_messages.len();
 
     while count < limit {
-        let (_, res_messages) =
-            api::get_messages_with_time_section(count, before, after).await?;
+        let (_, res_messages) = api::get_messages_with_time_section(count, before, after).await?;
 
         tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;
 
