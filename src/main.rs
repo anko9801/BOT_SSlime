@@ -201,10 +201,19 @@ pub async fn update_markov_chain(pool: &MySqlPool) -> anyhow::Result<()> {
 
     *MARKOV_CHAIN.lock().unwrap() = Chain::of_order(2);
 
-    let batch_size: i64 = 1000;
-    let mut offset: i64 = 0;
+    let max_messages: i64 = 5000;
+    let batch_size: i64 = 500;
+    let total = db::get_message_count(pool).await?;
+    info!("{} messages in DB, feeding last {}", total, max_messages);
+    let start_offset = (total - max_messages).max(0);
+    let mut offset = start_offset;
     loop {
-        let messages = db::get_messages_batched(pool, offset, batch_size).await?;
+        let remaining = max_messages - (offset - start_offset);
+        if remaining <= 0 {
+            break;
+        }
+        let limit = batch_size.min(remaining);
+        let messages = db::get_messages_batched(pool, offset, limit).await?;
         if messages.is_empty() {
             break;
         }
@@ -214,7 +223,7 @@ pub async fn update_markov_chain(pool: &MySqlPool) -> anyhow::Result<()> {
                 .map(|m| m.content.clone())
                 .collect::<Vec<String>>(),
         );
-        offset += batch_size;
+        offset += limit;
     }
     Ok(())
 }

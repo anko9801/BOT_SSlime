@@ -34,7 +34,7 @@ pub async fn connect_db() -> anyhow::Result<MySqlPool> {
     let password = env::var("MARIADB_PASSWORD").unwrap();
 
     let pool = MySqlPoolOptions::new()
-        .max_connections(5)
+        .max_connections(2)
         .connect(&format!(
             "mysql://{}:{}@{}/{}",
             username, password, hostname, database
@@ -76,6 +76,13 @@ pub async fn get_messages(pool: &MySqlPool) -> anyhow::Result<Vec<MessageRecord>
         .fetch_all(pool)
         .await?;
     Ok(messages)
+}
+
+pub async fn get_message_count(pool: &MySqlPool) -> anyhow::Result<i64> {
+    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM messages")
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
 }
 
 pub async fn get_messages_batched(
