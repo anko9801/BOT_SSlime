@@ -34,7 +34,7 @@ pub async fn connect_db() -> anyhow::Result<MySqlPool> {
     let password = env::var("MARIADB_PASSWORD").unwrap();
 
     let pool = MySqlPoolOptions::new()
-        .max_connections(10)
+        .max_connections(5)
         .connect(&format!(
             "mysql://{}:{}@{}/{}",
             username, password, hostname, database
@@ -75,6 +75,20 @@ pub async fn get_messages(pool: &MySqlPool) -> anyhow::Result<Vec<MessageRecord>
     let messages: Vec<MessageRecord> = sqlx::query_as("SELECT * FROM messages;")
         .fetch_all(pool)
         .await?;
+    Ok(messages)
+}
+
+pub async fn get_messages_batched(
+    pool: &MySqlPool,
+    offset: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<MessageRecord>> {
+    let messages: Vec<MessageRecord> =
+        sqlx::query_as("SELECT * FROM messages LIMIT ? OFFSET ?")
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await?;
     Ok(messages)
 }
 

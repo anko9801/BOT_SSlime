@@ -1,4 +1,4 @@
-use std::{env, sync::Arc, thread, time::Duration};
+use std::{env, sync::Arc, time::Duration};
 
 use log::{debug, error};
 use rand::RngExt;
@@ -12,8 +12,8 @@ pub async fn start_scheduling(
     pool: &'static MySqlPool,
     channel_id: &'static str,
     rate_limiter: Arc<RateLimiter>,
-) -> anyhow::Result<tokio::task::JoinHandle<()>> {
-    let main_scheduler = JobScheduler::new()?;
+) -> anyhow::Result<()> {
+    let main_scheduler = JobScheduler::new().await?;
 
     dotenv::dotenv().ok();
     let many_msg = env::var("MANY_MSG").map(|s| s == "1").unwrap_or(false);
@@ -32,7 +32,7 @@ pub async fn start_scheduling(
             let next_span = rand::rng().random_range(1..60);
             debug!("scheduled at {} minutes later", next_span);
             if !many_msg {
-                thread::sleep(Duration::from_secs(next_span * 60));
+                tokio::time::sleep(Duration::from_secs(next_span * 60)).await;
             }
             let message = generate_message();
             if let Err(e) =
@@ -52,8 +52,9 @@ pub async fn start_scheduling(
         })
     })?;
 
-    main_scheduler.add(post_job)?;
-    main_scheduler.add(update_markov_job)?;
+    main_scheduler.add(post_job).await?;
+    main_scheduler.add(update_markov_job).await?;
 
-    Ok(main_scheduler.start()?)
+    main_scheduler.start().await?;
+    Ok(())
 }

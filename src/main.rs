@@ -19,7 +19,6 @@ use lindera::{
 use markov::Chain;
 use once_cell::sync::{Lazy, OnceCell};
 use regex::{Regex, RegexSet};
-use rocket::futures::future;
 use sqlx::MySqlPool;
 
 use log::{debug, info};
@@ -32,11 +31,17 @@ use crate::{
         direct_message_handler, join_handler, left_handler, mentioned_handler,
         non_mentioned_message_handler,
     },
-    messages::{fetch_messages, get_latest_message, get_messages},
-    model::db::connect_db,
+    messages::{fetch_messages, get_latest_message},
+    model::db::{self, connect_db},
 };
 
 pub static MARKOV_CHAIN: Lazy<Mutex<Chain<String>>> = Lazy::new(|| Mutex::new(Chain::of_order(2)));
+
+static TOKENIZER: Lazy<Tokenizer> = Lazy::new(|| {
+    let dictionary = load_dictionary("embedded://ipadic").unwrap();
+    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
+    Tokenizer::new(segmenter)
+});
 
 pub static FREQUENCIES_CACHE: Lazy<Mutex<HashMap<String, i64>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -99,9 +104,9 @@ async fn main() -> anyhow::Result<()> {
     update_markov_chain(POOL.get().unwrap()).await?;
     info!("markov chain loaded successfully !");
 
-    let cron_loop = start_scheduling(POOL.get().unwrap(), CRON_CHANNEL_ID, rate_limiter).await?;
+    start_scheduling(POOL.get().unwrap(), CRON_CHANNEL_ID, rate_limiter).await?;
 
-    let _ = future::join(bot.start(), cron_loop).await;
+    let _ = bot.start().await;
 
     Ok(())
 }
@@ -159,9 +164,6 @@ fn traq_message_format(messages: String) -> Vec<ContentType> {
 }
 
 fn feed_messages(messages: &[String]) {
-    let dictionary = load_dictionary("embedded://ipadic").unwrap();
-    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
-    let tokenizer = Tokenizer::new(segmenter);
     for message in messages {
         if BLOCK_MESSAGE_REGEX.is_match(message) {
             continue;
@@ -170,7 +172,7 @@ fn feed_messages(messages: &[String]) {
         let tokens = message_elements
             .iter()
             .flat_map(|e| match e {
-                ContentType::Text(text) => tokenizer
+                ContentType::Text(text) => TOKENIZER
                     .tokenize(text)
                     .unwrap()
                     .iter()
@@ -196,13 +198,24 @@ pub async fn update_markov_chain(pool: &MySqlPool) -> anyhow::Result<()> {
         .map(|m| naive_to_local(m.created_at));
     let force_fetch = env::var("FORCE_FETCH").map(|v| v == "1").unwrap_or(false);
     fetch_messages(pool, None, if force_fetch { None } else { after }).await?;
-    let messages = get_messages(pool).await?;
-    feed_messages(
-        &messages
-            .iter()
-            .map(|m| m.content.clone())
-            .collect::<Vec<String>>(),
-    );
+
+    *MARKOV_CHAIN.lock().unwrap() = Chain::of_order(2);
+
+    let batch_size: i64 = 1000;
+    let mut offset: i64 = 0;
+    loop {
+        let messages = db::get_messages_batched(pool, offset, batch_size).await?;
+        if messages.is_empty() {
+            break;
+        }
+        feed_messages(
+            &messages
+                .iter()
+                .map(|m| m.content.clone())
+                .collect::<Vec<String>>(),
+        );
+        offset += batch_size;
+    }
     Ok(())
 }
 
